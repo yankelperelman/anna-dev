@@ -1,0 +1,24 @@
+services:
+  anna:
+    build: .
+    container_name: anna
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false   # optional: you can enter the key on the web page instead
+    environment:
+      # inside the container; the published port below is what you open in the browser
+      ANNA_HOST: 0.0.0.0
+      ANNA_PORT: "8010"
+      ANNA_DB_PATH: /data/anna_history.sqlite3
+      ANNA_KEY_FILE: /data/gemini_key.txt
+    ports:
+      # localhost only: the WebSocket has no authentication.
+      # Change to "8010:8010" only behind a reverse proxy with auth.
+      - "127.0.0.1:8010:8010"
+    volumes:
+      - anna-data:/data          # conversation log survives restarts
+      - ./skills:/app/skills:ro  # add or edit skills without rebuilding
+
+volumes:
+  anna-data:

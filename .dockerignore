@@ -1,0 +1,21 @@
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+.venv
+venv
+__pycache__
+*.pyc
+*.sqlite3
+*.db
+*.log
+*.wav
+*.mp3
+audio_parts
+live_parts
+temp_audio_parts
+skills/старые скилы
+README.md
+gemini_key.txt
+gemini_key.txt.tmp

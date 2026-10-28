@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anna — voice assistant</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { color-scheme: dark; font-family: system-ui, -apple-system, sans-serif; }
+  body { margin:0; min-height:100vh; display:grid; place-items:center; background:#10131a; color:#f3f5fa; }
+  main { width:min(720px, calc(100% - 32px)); padding:28px; box-sizing:border-box; border:1px solid #303746; border-radius:24px; background:#191e29; }
+  h1 { margin:0 0 8px; font-size:28px; }
+  .muted { color:#aab2c1; }
+  .buttons { display:flex; gap:12px; flex-wrap:wrap; margin:22px 0; }
+  button { border:0; border-radius:12px; padding:13px 18px; font-size:16px; font-weight:650; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  #start { background:#7c9cff; color:#101522; }
+  #stop { background:#353d4d; color:white; }
+  .small { padding:8px 12px; font-size:14px; font-weight:600; }
+  #status { padding:12px 14px; background:#111722; border:1px solid #303746; border-radius:12px; white-space:pre-wrap; }
+  #log { margin-top:16px; max-height:280px; overflow:auto; white-space:pre-wrap; line-height:1.5; }
+  .entry { padding:9px 0; border-bottom:1px solid #303746; }
+  .who { color:#9bb4ff; font-weight:700; }
+
+  .keybox { padding:16px; border:1px solid #303746; border-radius:14px; background:#141a24; margin-bottom:18px; }
+  .keybox .caption { display:block; margin-bottom:8px; font-size:14px; color:#aab2c1; }
+  .keybox input[type=password] {
+    width:100%; box-sizing:border-box; padding:10px 12px; border-radius:12px;
+    border:1px solid #303746; background:#111722; color:#f3f5fa; font:inherit;
+  }
+  .keybox input[type=password]:focus { outline:2px solid #7c9cff; outline-offset:1px; }
+  .keybox .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:10px; }
+  .keybox .hint { font-size:13px; color:#7d8696; margin-top:8px; line-height:1.5; }
+  .keybox .hint a { color:#9bb4ff; }
+  .keybox .configured { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .keybox .configured .badge { color:#7ad39a; font-weight:700; }
+  .keybox .error { color:#ff8686; font-size:13px; margin-top:8px; white-space:pre-wrap; }
+
+  .settings { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:6px; }
+  .settings label { flex:1 1 220px; font-size:14px; color:#aab2c1; }
+  .settings select {
+    width:100%; box-sizing:border-box; margin-top:6px; padding:10px 12px; border-radius:12px;
+    border:1px solid #303746; background:#111722; color:#f3f5fa; font:inherit;
+  }
+  .settings select:disabled { opacity:.5; }
+
+  textarea { width:100%; margin-top:8px; box-sizing:border-box; border-radius:12px;
+             border:1px solid #303746; background:#111722; color:#f3f5fa; padding:10px; font:inherit; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Anna</h1>
+  <div class="muted">Voice assistant for server monitoring</div>
+
+  <div class="keybox" id="keyBox" style="margin-top:22px">
+    <div id="keyNotConfigured">
+      <label class="caption" for="apiKey">Gemini API key</label>
+      <input type="password" id="apiKey" placeholder="AIza..." autocomplete="off" spellcheck="false">
+      <div class="row">
+        <button class="small" id="saveKey" style="background:#7c9cff;color:#101522">Save key</button>
+      </div>
+      <div class="hint">
+        Get a key at
+        <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>.
+        The key is sent only to this Anna server, validated against Google, then stored
+        in <code>gemini_key.txt</code> on the server with permissions 0600.
+        On the free tier Google may use your conversations to improve its products,
+        so do not discuss sensitive information. Use only where the Gemini API is officially available.
+      </div>
+      <div class="error" id="keyError" style="display:none"></div>
+    </div>
+
+    <div id="keyConfigured" style="display:none">
+      <div class="configured">
+        <span class="badge">✓ Gemini key configured</span>
+        <button class="small" id="changeKey" style="background:#353d4d;color:white">Change key</button>
+        <button class="small" id="removeKey" style="background:#353d4d;color:white">Remove key</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="settings">
+    <label>Model
+      <select id="modelSelect"></select>
+    </label>
+    <label>Voice
+      <select id="voiceSelect"></select>
+    </label>
+  </div>
+
+  <div class="buttons">
+    <button id="start" disabled>🎙 Start conversation</button>
+    <button id="stop" disabled>■ Stop</button>
+  </div>
+
+  <div id="status">Not connected.</div>
+  <div id="log" aria-live="polite"></div>
+
+  <textarea id="textInput" rows="4"
+            placeholder="Type or paste text here, then click 'Send text'"></textarea>
+  <div class="buttons">
+    <button id="sendText" style="background:#353d4d;color:white" disabled>Send text</button>
+  </div>
+</main>
+
+<script>
+const startButton       = document.getElementById('start');
+const stopButton        = document.getElementById('stop');
+const statusEl          = document.getElementById('status');
+const logEl             = document.getElementById('log');
+const textInput         = document.getElementById('textInput');
+const sendTextBtn       = document.getElementById('sendText');
+const modelSelect       = document.getElementById('modelSelect');
+const voiceSelect       = document.getElementById('voiceSelect');
+
+const keyNotConfigured  = document.getElementById('keyNotConfigured');
+const keyConfiguredEl   = document.getElementById('keyConfigured');
+const apiKeyInput       = document.getElementById('apiKey');
+const saveKeyBtn        = document.getElementById('saveKey');
+const changeKeyBtn      = document.getElementById('changeKey');
+const removeKeyBtn      = document.getElementById('removeKey');
+const keyError          = document.getElementById('keyError');
+
+let ws = null;
+let mediaStream = null;
+let inputContext = null;
+let outputContext = null;
+let sourceNode = null;
+let processorNode = null;
+let muteNode = null;
+let nextPlayTime = 0;
+let manuallyStopping = false;
+let audioInitialized = false;
+let conversationActive = false;
+let keyState = 'unknown'; // 'unknown' | 'none' | 'configured'
+
+function setStatus(text) { statusEl.textContent = text; }
+
+function addLog(who, text) {
+  const row = document.createElement('div');
+  row.className = 'entry';
+  const label = document.createElement('span');
+  label.className = 'who';
+  label.textContent = who + ': ';
+  const value = document.createElement('span');
+  value.textContent = text;
+  row.append(label, value);
+  logEl.appendChild(row);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function showKeyError(msg) {
+  if (!msg) {
+    keyError.style.display = 'none';
+    keyError.textContent = '';
+    return;
+  }
+  keyError.textContent = msg;
+  keyError.style.display = 'block';
+}
+
+function renderKeyUI() {
+  if (keyState === 'configured') {
+    keyNotConfigured.style.display = 'none';
+    keyConfiguredEl.style.display = 'block';
+  } else {
+    keyNotConfigured.style.display = 'block';
+    keyConfiguredEl.style.display = 'none';
+  }
+  startButton.disabled = (keyState !== 'configured') || conversationActive;
+  modelSelect.disabled = conversationActive;
+  voiceSelect.disabled = conversationActive;
+}
+
+async function refreshKeyState() {
+  try {
+    const r = await fetch('/api/key');
+    const data = await r.json();
+    keyState = data.configured ? 'configured' : 'none';
+  } catch (_) {
+    keyState = 'none';
+  }
+  renderKeyUI();
+}
+
+/* ---------- model and voice selectors ---------- */
+const PREF_KEY = 'anna.prefs';
+
+function loadPrefs() {
+  try { return JSON.parse(localStorage.getItem(PREF_KEY)) || {}; }
+  catch (_) { return {}; }
+}
+
+function savePrefs() {
+  try {
+    localStorage.setItem(PREF_KEY, JSON.stringify({ model: modelSelect.value, voice: voiceSelect.value }));
+  } catch (_) {}
+}
+
+function fillSelect(select, values, preferred, fallback) {
+  select.innerHTML = '';
+  for (const v of values) {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = v;
+    select.appendChild(opt);
+  }
+  if (values.includes(preferred)) select.value = preferred;
+  else if (values.includes(fallback)) select.value = fallback;
+  else if (values.length) select.value = values[0];
+}
+
+async function loadOptions() {
+  try {
+    const r = await fetch('/api/options');
+    const data = await r.json();
+    const prefs = loadPrefs();
+    fillSelect(modelSelect, data.models || [], prefs.model, data.default_model);
+    fillSelect(voiceSelect, data.voices || [], prefs.voice, data.default_voice);
+  } catch (err) {
+    console.error('Could not load model and voice lists:', err);
+  }
+}
+
+modelSelect.addEventListener('change', savePrefs);
+voiceSelect.addEventListener('change', savePrefs);
+
+/* ---------- API key ---------- */
+async function saveKey() {
+  const key = apiKeyInput.value.trim();
+  if (!key) return;
+  showKeyError('');
+  saveKeyBtn.disabled = true;
+  const prev = saveKeyBtn.textContent;
+  saveKeyBtn.textContent = 'Saving…';
+  try {
+    const r = await fetch('/api/key', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ api_key: key }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      showKeyError(data.detail || ('Save failed with status ' + r.status));
+      return;
+    }
+    apiKeyInput.value = '';
+    await refreshKeyState();
+    await loadOptions();
+    setStatus('Gemini API key saved.');
+  } catch (err) {
+    showKeyError('Save failed: ' + (err.message || err));
+  } finally {
+    saveKeyBtn.disabled = false;
+    saveKeyBtn.textContent = prev;
+  }
+}
+
+async function removeKey() {
+  if (!confirm('Remove the saved Gemini API key from this server?')) return;
+  try {
+    const r = await fetch('/api/key', { method: 'DELETE' });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      alert('Remove failed: ' + (data.detail || r.status));
+      return;
+    }
+    await refreshKeyState();
+    await loadOptions();
+    setStatus(keyState === 'configured'
+      ? 'Saved key removed. A key from the GOOGLE_API_KEY environment variable is still in use.'
+      : 'Gemini API key removed.');
+  } catch (err) {
+    alert('Remove failed: ' + (err.message || err));
+  }
+}
+
+saveKeyBtn.addEventListener('click', saveKey);
+apiKeyInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); saveKey(); }
+});
+changeKeyBtn.addEventListener('click', () => {
+  keyState = 'none';
+  renderKeyUI();
+  apiKeyInput.focus();
+});
+removeKeyBtn.addEventListener('click', removeKey);
+
+/* ---------- audio ---------- */
+function floatToPcm16(float32) {
+  const buffer = new ArrayBuffer(float32.length * 2);
+  const view = new DataView(buffer);
+  for (let i = 0; i < float32.length; i++) {
+    const sample = Math.max(-1, Math.min(1, float32[i]));
+    view.setInt16(i * 2, sample < 0 ? sample * 32768 : sample * 32767, true);
+  }
+  return buffer;
+}
+
+function resampleTo16k(input, inputRate) {
+  const outputRate = 16000;
+  if (inputRate === outputRate) return new Float32Array(input);
+  const ratio = inputRate / outputRate;
+  const outLength = Math.floor(input.length / ratio);
+  const output = new Float32Array(outLength);
+  for (let i = 0; i < outLength; i++) {
+    const position = i * ratio;
+    const left = Math.floor(position);
+    const right = Math.min(left + 1, input.length - 1);
+    const fraction = position - left;
+    output[i] = input[left] * (1 - fraction) + input[right] * fraction;
+  }
+  return output;
+}
+
+function playPcmBase64(base64Audio, sampleRate = 24000) {
+  if (!outputContext || outputContext.state === 'closed') return;
+  const binary = atob(base64Audio);
+  const byteLength = binary.length - (binary.length % 2);
+  if (byteLength < 2) return;
+  const bytes = new Uint8Array(byteLength);
+  for (let i = 0; i < byteLength; i++) bytes[i] = binary.charCodeAt(i);
+  const view = new DataView(bytes.buffer);
+  const sampleCount = byteLength / 2;
+  const audioBuffer = outputContext.createBuffer(1, sampleCount, sampleRate);
+  const channel = audioBuffer.getChannelData(0);
+  for (let i = 0; i < sampleCount; i++) channel[i] = view.getInt16(i * 2, true) / 32768;
+  const source = outputContext.createBufferSource();
+  source.buffer = audioBuffer;
+  source.connect(outputContext.destination);
+  const startAt = Math.max(outputContext.currentTime + 0.03, nextPlayTime);
+  source.start(startAt);
+  nextPlayTime = startAt + audioBuffer.duration;
+}
+
+async function cleanupAudio() {
+  audioInitialized = false;
+  if (processorNode) {
+    processorNode.onaudioprocess = null;
+    try { processorNode.disconnect(); } catch (_) {}
+    processorNode = null;
+  }
+  if (sourceNode) { try { sourceNode.disconnect(); } catch (_) {} sourceNode = null; }
+  if (muteNode)   { try { muteNode.disconnect();   } catch (_) {} muteNode = null; }
+  if (mediaStream) {
+    for (const track of mediaStream.getTracks()) track.stop();
+    mediaStream = null;
+  }
+  if (inputContext && inputContext.state !== 'closed') {
+    try { await inputContext.close(); } catch (_) {}
+  }
+  inputContext = null;
+  if (outputContext && outputContext.state !== 'closed') {
+    try { await outputContext.close(); } catch (_) {}
+  }
+  outputContext = null;
+  nextPlayTime = 0;
+}
+
+function setTextEnabled(enabled) {
+  textInput.disabled = !enabled;
+  sendTextBtn.disabled = !enabled;
+}
+
+async function startAudioCapture(socket) {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    throw new Error('The browser does not allow microphone access here. Use localhost or HTTPS.');
+  }
+  mediaStream = await navigator.mediaDevices.getUserMedia({
+    audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+  });
+
+  inputContext  = new (window.AudioContext || window.webkitAudioContext)();
+  outputContext = new (window.AudioContext || window.webkitAudioContext)();
+  await inputContext.resume();
+  await outputContext.resume();
+  nextPlayTime = outputContext.currentTime;
+
+  sourceNode = inputContext.createMediaStreamSource(mediaStream);
+  processorNode = inputContext.createScriptProcessor(4096, 1, 1);
+  muteNode = inputContext.createGain();
+  muteNode.gain.value = 0;
+  processorNode.onaudioprocess = (event) => {
+    if (!ws || ws !== socket || socket.readyState !== WebSocket.OPEN) return;
+    const input = event.inputBuffer.getChannelData(0);
+    const pcm = resampleTo16k(input, inputContext.sampleRate);
+    if (pcm.length && socket.readyState === WebSocket.OPEN) {
+      try { socket.send(floatToPcm16(pcm)); }
+      catch (err) { console.error('Audio send failed:', err); }
+    }
+  };
+  sourceNode.connect(processorNode);
+  processorNode.connect(muteNode);
+  muteNode.connect(inputContext.destination);
+}
+
+/* ---------- conversation ---------- */
+async function stopConversation(closeSocket = true) {
+  manuallyStopping = true;
+  conversationActive = false;
+  const socket = ws;
+  ws = null;
+  if (socket && closeSocket && socket.readyState < WebSocket.CLOSING) {
+    try { socket.close(1000, 'User stopped'); } catch (_) {}
+  }
+  await cleanupAudio();
+  stopButton.disabled = true;
+  setTextEnabled(false);
+  renderKeyUI();
+  setStatus('Conversation stopped.');
+  manuallyStopping = false;
+}
+
+function sendTextMessage() {
+  const text = textInput.value.trim();
+  if (!text) return;
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    addLog('Error', 'Start the conversation first.');
+    return;
+  }
+  ws.send(JSON.stringify({ type: 'text', text: text }));
+  addLog('You', text);
+  textInput.value = '';
+  textInput.focus();
+}
+
+startButton.addEventListener('click', async () => {
+  if (keyState !== 'configured') return;
+  conversationActive = true;
+  renderKeyUI();
+  setStatus('Connecting…');
+
+  try {
+    const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const query = new URLSearchParams({ model: modelSelect.value, voice: voiceSelect.value });
+    const socket = new WebSocket(`${scheme}//${location.host}/ws?${query}`);
+    ws = socket;
+    socket.binaryType = 'arraybuffer';
+    manuallyStopping = false;
+
+    socket.onopen = () => setStatus('Waiting for Gemini…');
+
+    socket.onmessage = async (event) => {
+      let data;
+      try { data = JSON.parse(event.data); }
+      catch (_) { return; }
+
+      if (data.type === 'status') {
+        if (!audioInitialized) {
+          audioInitialized = true;
+          try {
+            await startAudioCapture(socket);
+            setTextEnabled(true);
+          } catch (err) {
+            console.error(err);
+            setStatus('Microphone error: ' + (err.message || err));
+            try { socket.close(); } catch (_) {}
+            return;
+          }
+        }
+        setStatus(data.message || 'Connected.');
+      } else if (data.type === 'error') {
+        setStatus(data.message || 'Server error.');
+        addLog('Error', data.message || 'Unknown error');
+      } else if (data.type === 'transcript') {
+        addLog(data.role === 'user' ? 'You' : 'Anna', data.text || '');
+      } else if (data.type === 'audio') {
+        try { playPcmBase64(data.data, data.sampleRate || 24000); }
+        catch (err) { console.error('Audio playback failed:', err); }
+      } else if (data.type === 'tool') {
+        addLog('Tool ' + data.name, data.result || '');
+      }
+    };
+
+    socket.onerror = () => setStatus('WebSocket error. Check the server terminal.');
+
+    socket.onclose = async (event) => {
+      if (ws === socket) ws = null;
+      conversationActive = false;
+      await cleanupAudio();
+      stopButton.disabled = true;
+      setTextEnabled(false);
+      renderKeyUI();
+      if (!manuallyStopping) {
+        if (event.code === 1011) {
+          setStatus('Session ended. Check the server log (missing or invalid Gemini API key, or a model/voice that is not supported?).');
+        } else if (event.code === 1000) {
+          setStatus('Connection closed.');
+        } else {
+          setStatus(`Connection closed (code ${event.code}). Check the server log.`);
+        }
+      }
+    };
+
+    stopButton.disabled = false;
+  } catch (err) {
+    console.error(err);
+    conversationActive = false;
+    await cleanupAudio();
+    stopButton.disabled = true;
+    setTextEnabled(false);
+    renderKeyUI();
+    setStatus('Failed to start conversation: ' + (err.message || err));
+  }
+});
+
+sendTextBtn.addEventListener('click', sendTextMessage);
+textInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendTextMessage(); }
+});
+stopButton.addEventListener('click', () => stopConversation(true));
+window.addEventListener('beforeunload', () => {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.close(1000, 'Page unloading');
+});
+
+refreshKeyState();
+loadOptions();
+</script>
+</body>
+</html>

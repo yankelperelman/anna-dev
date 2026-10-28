@@ -1,0 +1,36 @@
+# Secrets — NEVER commit
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Key saved from the web page
+gemini_key.txt
+gemini_key.txt.tmp
+
+# Local data (conversation history may contain private speech transcripts)
+*.sqlite3
+*.db
+*.log
+
+# Audio test files and scratch folders
+*.wav
+*.mp3
+audio_parts/
+live_parts/
+temp_audio_parts/
+
+# Old / experimental skills
+skills/старые скилы/
+
+# Editors / OS
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store

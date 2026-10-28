@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+google-genai
+httpx
+ddgs
+python-dotenv
+# The bundled server monitoring skill needs only the standard library.
+# Add packages your own skills need, then pin versions with: pip freeze
