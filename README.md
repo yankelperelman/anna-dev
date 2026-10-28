@@ -8,6 +8,8 @@ This is the **developer edition**: you run it on your own machine or your own se
 with **your own API key**. A separate desktop edition for end users is planned.
 
 > **Not affiliated with Google.** Gemini is a trademark of Google LLC.
+>
+> ![Anna web interface](docs/screenshot.png)
 
 ## Features
 
