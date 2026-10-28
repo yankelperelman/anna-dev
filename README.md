@@ -9,7 +9,7 @@ with **your own API key**. A separate desktop edition for end users is planned.
 
 > **Not affiliated with Google.** Gemini is a trademark of Google LLC.
 >
-> ![Anna web interface](docs/screenshot.png)
+> ![Anna web interface](/screenshot.png)
 
 ## Features
 
