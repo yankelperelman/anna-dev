@@ -7,9 +7,11 @@ speaks to her.
 This is the **developer edition**: you run it on your own machine or your own server
 with **your own API key**. A separate desktop edition for end users is planned.
 
-> **Not affiliated with Google.** Gemini is a trademark of Google LLC.
->
-> ![Anna web interface](/screenshot.png)
+Not affiliated with Google. Gemini is a trademark of Google LLC.
+
+📝 Write-up: [Streaming microphone audio to Gemini Live from a browser](https://dev.to/yankel_perelman_96a1f31a6/streaming-microphone-audio-to-gemini-live-from-a-browser-what-i-learned-building-a-small-voice-16m7)
+
+![Anna web interface](screenshot.png)
 
 ## Features
 
@@ -153,6 +155,10 @@ Terms change; check them before you rely on this summary.
 - Additional providers (Vertex AI, OpenAI Realtime) behind a common interface
 - Authentication for the web interface
 - More skills
+
+## Articles
+
+- [Streaming microphone audio to Gemini Live from a browser: what I learned building a small voice assistant](https://dev.to/yankel_perelman_96a1f31a6/streaming-microphone-audio-to-gemini-live-from-a-browser-what-i-learned-building-a-small-voice-16m7)
 
 ## License
 
